@@ -65,7 +65,7 @@ Milliseid samme on vaja teha andmete puhastamiseks ja standardiseerimiseks? Kui 
 ### 🟡 3.2 Tehisintellektispetsiifiline ettevalmistus
 Kuidas andmed tehisintellekti mudelile sobivaks tehakse (nt tükeldamine, vektoriseerimine, metaandmete lisamine)?
 
-> csv -> json -> wordtovec vektoriseerimine -> andmebaas
+> Iga aine kohta koostatakse üks tekstitükk (`rag_text`), mis sisaldab kõiki RAG-i jaoks olulisi välju struktureeritud siltidega (nt `Description (EN):`, `Objectives (ET):` jne). Tekst on kahekeelne (eesti ja inglise keel), et päringud mõlemas keeles leiaksid vasteid. Tükeldamist (chunking) ei kasutata, kuna `rag_text` pikkus jääb enamasti alla 3000 tähemärgi ning mahub mudeli kontekstiaknasse. Vektoriseerimisel kasutatakse mitmekeelset `sentence-transformers` mudelit (`paraphrase-multilingual-MiniLM-L12-v2`), mis toetab üle 50 keele sh eesti ja inglise keelt. Vektorid salvestatakse ChromaDB vektorandmebaasi koos metaandmetega (ainekood, EAP, semester, asukoht, õppetöö keel, õppeaste, hindamise tüüp), mis võimaldab filtreerimist otsingus.
 
 <br>
 <br>
@@ -76,28 +76,28 @@ Fookus: Tehisintellekti rakendamise süsteemi komponentide ja disaini kirjeldami
 ### 🟢 4.1 Komponentide valik ja koostöö
 Millist tüüpi tehisintellekti komponente on vaja rakenduses kasutada? Kas on vaja ka komponente, mis ei sisalda tehisintellekti? Kas komponendid on eraldiseisvad või sõltuvad üksteisest (keerulisem agentsem disan)?
 
-> ...
+> Süsteem koosneb kolmest omavahel seotud komponendist. (1) **Embeddingu mudel** (`paraphrase-multilingual-MiniLM-L12-v2`): teisendab nii ainekirjeldused kui ka kasutaja päringu numbrilisteks vektoriteks. (2) **Vektorandmebaas** (ChromaDB): hoiab kõigi ainete vektoreid ja metaandmeid ning teostab semantilise lähimate naabrite otsingu. (3) **Kasutajaliides** (Streamlit): kuvab tulemused ja võimaldab filtreerimist (semester, keel, õppeaste). Komponendid on ahelseoses – kasutaja sisend vektoriseeritakse, seejärel tehakse ChromaDB-s semantiline otsing ning tulemused kuvatakse Streamlit rakenduses. Tulevikus saab ahelasse lisada LLM-i (nt Groq API), mis genereerib lühikese kokkuvõtliku soovituse otsingutulemuste põhjal.
 
 ### 🟢 4.2 Tehisintellekti lahenduste valik
 Milliseid mudeleid on plaanis kasutada? Kas kasutada valmis teenust (API) või arendada/majutada mudelid ise?
 
-> ...
+> **Embeddingu mudel:** `paraphrase-multilingual-MiniLM-L12-v2` (HuggingFace, MIT litsents, ~118 MB), jookseb lokaalselt `sentence-transformers` teegi kaudu – ei nõua API võtit ega internetiühendust päringutel. **LLM soovituste genereerimiseks (tulevikus):** 
 
 ### 🟢 4.3 Kuidas hinnata rakenduse headust?
 Kuidas rakenduse arenduse käigus hinnata rakenduse headust?
 
-> ...
+> Hindamine toimub käsitsi koostatud teststsenaariumitega. Näiteks: sisend "tahan õppida masinõpet" – kontrollitakse, et tulemuste hulgas on andmeteaduse ained (nt LTAT.02.002, LTAT.02.006). Teststsenaariumid katavad: (a) eestikeelne päring, (b) ingliskeelne päring, (c) filtri kombineerimine (nt "ingliskeelne kevadsemestri aine"), (d) ebatavaline/mitteotsene päring (nt "aine, kus õpitakse haiguste levikut modelleerima"). Hinnatakse, kas top-3 tulemus on sisulisel asjakohane. Lisaks kontrollitakse, et filtrid (semester, keel, õppeaste) töötavad korrektselt.
 
 ### 🟢 4.4 Rakenduse arendus
 Milliste sammude abil on plaanis/on võimalik rakendust järk-järgult parandada (viibadisain, erinevte mudelite testimine jne)?
 
-> ...
+> Arendus toimub iteratiivselt. **1. samm (praegune seis):** semantiline otsing ChromaDB + Streamlit UI filtritega – toimib ilma LLM-ita. **2. samm:** LLM-i lisamine – mudel saab otsingutulemused kontekstina ja genereerib lühikese eestikeelse soovituse koos põhjendusega. **3. samm:** süsteemiprompt täiendatakse kaitsemeetmetega prompt injection vastu; lisatakse päringu tõlkimine (ET/EN) enne otsimist, et parandada mitmekeelsete päringute täpsust. **4. samm:** kasutajaliidese parandamine – tulemuste kuvamine kaardidena, ÕISi otselink, tagasiside nupp. Erinevaid embeddingu mudeleid ja LLM-e saab vahetada konfiguratsioonifailis.
 
 
 ### 🟢 4.5 Riskijuhtimine
 Kuidas maandatakse tehisintellektispetsiifilisi riske (hallutsinatsioonid, kallutatus, turvalisus)?
 
-> ...
+> **Hallutsinatsioonid:** RAG arhitektuur piirab LLM-i väljundit – mudel saab vastata vektorotsingust leitud ainete põhjal ning ei tohiks välja mõelda olematuid aineid. Rakendus kuvab alati ka otsinguallikad (ainekoodid ja pealkirjad), et kasutaja saaks tulemuse üle kontrollida. **Prompt injection:** süsteemiprompti lisatakse juhis, et mudel vastab ainult ainete soovitamisega seotud küsimustele ja ignoreerib kõrvalisi käske. Kasutaja sisend sanatiseeritakse (pikkuspiirang, sõnakeelud). **Andmeleke:** kasutaja sisend saadetakse LLM API-le – kasutajat teavitatakse sellest liideses. Personaalset infot ei logita. **Kallutatus:** andmestik pärineb TÜ ÕIS-ist ja on neutraalne faktipõhine andmebaas, seega ideoloogiline kallutatus on madal. Küll aga võib andmestik olla kaldu ingliskeelsete ainete poole, kuna ingliskeelsed kirjeldused on täielikumad.
 
 <br>
 <br>
@@ -108,7 +108,7 @@ Fookus: kuidas hinnata loodud lahenduse rakendatavust ettevõttes/probleemilahen
 ### 🔵 5.1 Vastavus eesmärkidele
 Kuidas hinnata, kas rakendus vastab seatud eesmärkidele?
 
-> ...
+> Rakenduse vastavust eesmärkidele hinnati käsitsi koostatud teststsenaariumitega. Testiti nelja tüüpi päringuid: (a) **eestikeelne otsepäring** – nt „tahan õppida masinõpet ja andmeanalüüsi" → top-3 tulemustes peaksid olema andmeteaduse/ML ained (nt LTAT.02.002, LTAT.02.006); (b) **ingliskeelne päring** – nt „natural language processing and text mining" → tulemustes peaksid olema NLP ained olenemata sellest, kas aine kirjeldus on eesti- või ingliskeelne; (c) **filtri kombineerimine** – nt kevadsemestri ingliskeelne bakalaureuse aine → filtrid piiravad tulemuste hulga korrektselt; (d) **kaudne/ebatavaline päring** – nt „aine, kus õpitakse haiguste levikut modelleerima" → tulemus peaks sisaldama epidemioloogia või matemaatilise modelleerimise aineid. Kõigil neljal juhul tagastas rakendus sisulisel asjakohased top-3 tulemused, mis vastab seatud edukuse mõõdikule. Rakendus teavitab ka juhul, kui filtritega aineid ei leidu. Suurim avastatud piirang: lühikesed või äärmiselt üldised päringud (nt „aine") annavad sarnasuse skoori osas nõrgemaid tulemusi, kuid semantiliselt siiski mõistlikud tulemused.
 
 <br>
 <br>
@@ -119,9 +119,9 @@ Fookus: kuidas hinnata loodud lahenduse rakendatavust ettevõttes/probleemilahen
 ### 🟣 6.1 Integratsioon
 Kuidas ja millise liidese kaudu lõppkasutaja rakendust kasutab? Kuidas rakendus olemasolevasse töövoogu integreeritakse (juhul kui see on vajalik)?
 
-> ...
+> Rakendus on kasutatav veebiliidesena Streamlit raamistiku kaudu. Praeguses arendusfaasis käivitatakse see lokaalselt käsuga `conda run -n oisi_projekt streamlit run app.py`. Kasutaja avab brauseris aadressi `http://localhost:8501`, sisestab oma õpihuvi kirjelduse (eesti või inglise keeles), valib soovi korral filtrid (semester, õppetöö keel, õppeaste) ja saab tulemuste nimekirja koos otselingiga ÕISi aineleheküljele. Rakendus ei nõua kasutajalt autentimist ega ole seotud TÜ süsteemidega – see toimib sõltumatult ainete andmestiku lokaalse koopiana. Produktsioonilahendusena saaks rakenduse juurutada Streamlit Community Cloudis (tasuta, avalik URL) või TÜ serveris, kus see oleks kättesaadav kõigile tudengitele ilma lokaalse paigalduseta.
 
 ### 🟣 6.2 Rakenduse elutsükkel ja hooldus
 Kes vastutab süsteemi tööshoidmise ja jooksvate kulude eest? Kuidas toimub rakenduse uuendamine tulevikus?
 
-> ...
+> Praeguses mahus vastutab rakenduse eest projekti looja. Jooksvad kulud on sõltuvad arhitektuurist ja kasutusest: embeddingu mudel jookseb lokaalselt (tasuta), ChromaDB on lokaalne failisüsteem (tasuta) ning Streamlit Community Cloud on tasuta kuni teatud limiidini. Andmestik pärineb TÜ ÕISist – see vajab perioodilist uuendamist (nt iga semestri alguses), et kuvada ajakohast ainepakkumist. Uuendusprotsess: (1) tõmmata uus andmestik ÕISi APIst, (2) käivitada `andmete_ettevalmistus.ipynb` uuesti, (3) käivitada `build_vectorstore.py` uuesti, mis ehitab ChromaDB kollektsiooni nullist üles. Kogu protsess on automatiseeritav skriptiga. Mudeli vahetamine (nt parema embeddingu mudeli kasutuselevõtt) nõuab ainult `build_vectorstore.py` konfiguratsiooni muutmist ja vektorite ümberehitamist.
